@@ -1,7 +1,7 @@
 #include "cli.h"
-
 #include <string.h>
-
+#include "driver/uart.h"
+#include "driver/uart_vfs.h" 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -13,6 +13,12 @@ static const char *TAG = "cli";
 #define CLI_TASK_PRIORITY    5
 #define CLI_MAX_LINE_LEN  128
 #define CLI_MAX_ARGS         8
+#define CLI_PROMPT          "kv> "
+#define CLI_UART_NUM         UART_NUM_0
+#define CLI_UART_RX_BUF      256
+#define CLI_UART_TX_BUF      0
+#define CLI_UART_BAUD        115200
+
 
 typedef struct {
     const char  *name;
@@ -121,37 +127,52 @@ static int cli_tokenize(char *line, char **argv, int max_args){
 static void cli_task(void *arg)
 {
     (void)arg;
-    ESP_LOGI(TAG, "CLI task started");
+    ESP_LOGI(TAG, "CLI ready. Type 'help' for commands.");
 
-    static const char *test_lines[] = {
-        "help",
-        "set wifi.ssid MyNetwork",
-        "unknown_command foo bar",
-        "   set   spaced    out   ",
-    };
-
-    for (size_t i = 0; i < sizeof(test_lines) / sizeof(test_lines[0]); i++) {
-        char buf[CLI_MAX_LINE_LEN];
-        char *argv[CLI_MAX_ARGS];
-
-        strncpy(buf, test_lines[i], sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-
-        int argc = cli_tokenize(buf, argv, CLI_MAX_ARGS);
-        ESP_LOGI(TAG, "Line: \"%s\" -> argc=%d", test_lines[i], argc);
-
-        for (int j = 0; j < argc; j++) {
-            ESP_LOGI(TAG, "  argv[%d] = \"%s\"", j, argv[j]);
-        }
-
-        cli_dispatch(argc, argv);
-        vTaskDelay(pdMS_TO_TICKS(200));
-    }
-
-    ESP_LOGI(TAG, "Parser test complete, idling");
+    char buf[CLI_MAX_LINE_LEN];
+    char *argv[CLI_MAX_ARGS];
 
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        printf(CLI_PROMPT);
+        fflush(stdout);
+
+        int len = 0;
+        for (;;) {
+            uint8_t byte = 0;
+            int n = uart_read_bytes(CLI_UART_NUM, &byte, 1, portMAX_DELAY);
+            if (n <= 0) {
+                continue;
+            }
+
+            if (byte == '\r') {
+                continue;                  
+            }
+            if (byte == '\n') {
+                break;                     
+            }
+            if (byte == 0x7f || byte == 0x08) {   
+                if (len > 0) {
+                    len--;
+                    printf("\b \b");
+                    fflush(stdout);
+                }
+                continue;
+            }
+            if (len < (int)sizeof(buf) - 1) {
+                buf[len++] = (char)byte;
+                putchar(byte);
+                fflush(stdout);
+            }
+        }
+
+        buf[len] = '\0';
+
+        if (len == 0) {
+            continue;
+        }
+
+        int argc = cli_tokenize(buf, argv, CLI_MAX_ARGS);
+        cli_dispatch(argc, argv);
     }
 }
 
@@ -167,6 +188,31 @@ esp_err_t cli_start(void)
     if (s_cli_task != NULL) {
         ESP_LOGW(TAG, "CLI task already running");
         return ESP_ERR_INVALID_STATE;
+    }
+
+     const uart_config_t uart_cfg = {
+        .baud_rate  = CLI_UART_BAUD,
+        .data_bits  = UART_DATA_8_BITS,
+        .parity     = UART_PARITY_DISABLE,
+        .stop_bits  = UART_STOP_BITS_1,
+        .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    esp_err_t uart_ret = uart_driver_install(CLI_UART_NUM, CLI_UART_RX_BUF, CLI_UART_TX_BUF,0, NULL, 0);
+    
+    if (uart_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to install UART driver: %s",esp_err_to_name(uart_ret));
+        return uart_ret;
+    }
+
+    uart_vfs_dev_use_driver(CLI_UART_NUM);
+    ESP_LOGI(TAG, "cli_start: uart driver installed and VFS routed");
+
+    uart_ret = uart_param_config(CLI_UART_NUM, &uart_cfg);
+    
+    if (uart_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure UART: %s",esp_err_to_name(uart_ret));
+        return uart_ret;
     }
 
     BaseType_t ret = xTaskCreate(
