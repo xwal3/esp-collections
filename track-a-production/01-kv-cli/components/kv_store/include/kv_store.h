@@ -71,6 +71,23 @@ esp_err_t kv_store_clear(void);
 esp_err_t kv_store_iterate(kv_iter_fn_t fn, void *user);
 
 /**
+* @brief Persist current RAM state to NVS.
+* 
+*@return ESP_OK on success, or an esp_err_t from NVS.
+*/
+esp_err_t kv_store_save(void);
+
+/**
+ * @brief Populate RAM from NVS.
+ *
+ * Clears RAM first, then reads every entry from the NVS namespace.
+ *
+ * @return ESP_OK on success, or an esp_err_t from NVS.
+ */
+esp_err_t kv_store_load(void);
+
+
+/**
  * @brief Return the number of entries currently stored.
  */
 size_t kv_store_count(void);

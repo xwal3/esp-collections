@@ -75,6 +75,15 @@ static esp_err_t cmd_list(int argc, char **argv)
     return ESP_OK;
 }
 
+static esp_err_t cmd_save(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    esp_err_t ret = kv_store_save();
+    printf(ret == ESP_OK ? "OK\n" : "error: %s\n", esp_err_to_name(ret));
+    return ret;
+}
+
+
 static esp_err_t cmd_clear(int argc, char **argv)
 {
     (void)argc; (void)argv;
@@ -104,6 +113,7 @@ esp_err_t cmd_kv_register_all(void)
         { "del",   "Delete a key",     cmd_del   },
         { "list",  "Print all pairs",  cmd_list  },
         { "clear", "Delete all pairs", cmd_clear },
+        { "save",  "Persist to NVS",   cmd_save  },
         { "help",  "Show commands",    cmd_help  },
     };
 
