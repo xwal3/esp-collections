@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  placeholder:
+    name: Initiating CI.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge
+        run: echo "CI is running. Real builds below."
+  build:
+    name: Build ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - track-a-production/01-kv-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build with ESP-ID
+        uses: espressif/esp-idf-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32s3
+      - name: Build project
+        working-directory: ${{ matrix.project }}
+        run: |
+          idf.py build
+          idf.py size
+
