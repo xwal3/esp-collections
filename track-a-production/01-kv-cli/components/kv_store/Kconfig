@@ -17,4 +17,15 @@ menu "KV Store Configuration"
         range 8 256
         help
             Maximum length of a value including the NUL terminator.
+    config KV_NVS_PARTITION
+        string "NVS partition name"
+        default "nvs_user"
+        help
+            Must match the name in partitions.csv.
+
+    config KV_NVS_NAMESPACE
+        string "NVS namespace"
+        default "kv_store"
+        help
+            Isolated key space within the partition.
 endmenu

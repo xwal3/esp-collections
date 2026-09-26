@@ -11,8 +11,7 @@
 
 static const char *TAG = "kv_store";
 
-#define KV_NVS_PARTITION  "nvs_user"
-#define KV_NVS_NAMESPACE  "kv_store"
+
 
 typedef struct{
     char key[CONFIG_KV_MAX_KEY_LEN];
@@ -64,10 +63,10 @@ static esp_err_t set_locked(const char *key, const char *value){
 esp_err_t kv_store_init(void){
     
     if (s_mutex != NULL) return ESP_ERR_INVALID_STATE;
-    esp_err_t nvs_ret = nvs_flash_init_partition(KV_NVS_PARTITION);
+    esp_err_t nvs_ret = nvs_flash_init_partition(CONFIG_KV_NVS_PARTITION);
     if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase_partition(KV_NVS_PARTITION);
-        nvs_ret = nvs_flash_init_partition(KV_NVS_PARTITION);
+        nvs_flash_erase_partition(CONFIG_KV_NVS_PARTITION);
+        nvs_ret = nvs_flash_init_partition(CONFIG_KV_NVS_PARTITION);
     }
 
     if (nvs_ret != ESP_OK) {
@@ -172,7 +171,7 @@ esp_err_t kv_store_iterate(kv_iter_fn_t fn, void *user)
 
 esp_err_t kv_store_save(void){
     nvs_handle_t h;
-    esp_err_t ret = nvs_open_from_partition(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_READWRITE, &h);
+    esp_err_t ret = nvs_open_from_partition(CONFIG_KV_NVS_PARTITION, CONFIG_KV_NVS_NAMESPACE, NVS_READWRITE, &h);
 
     if (ret != ESP_OK) return ret;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
@@ -197,7 +196,7 @@ esp_err_t kv_store_save(void){
 esp_err_t kv_store_load(void)
 {
     nvs_handle_t h;
-    esp_err_t ret = nvs_open_from_partition(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_READONLY, &h);
+    esp_err_t ret = nvs_open_from_partition(CONFIG_KV_NVS_PARTITION, CONFIG_KV_NVS_NAMESPACE, NVS_READONLY, &h);
     if (ret == ESP_ERR_NVS_NOT_FOUND) return ESP_OK;
 
     if (ret != ESP_OK) return ret;
@@ -207,7 +206,7 @@ esp_err_t kv_store_load(void)
     s_count = 0;
 
     nvs_iterator_t it = NULL;
-    ret = nvs_entry_find(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_TYPE_STR, &it);
+    ret = nvs_entry_find(CONFIG_KV_NVS_PARTITION, CONFIG_KV_NVS_NAMESPACE, NVS_TYPE_STR, &it);
     while (ret == ESP_OK) {
         nvs_entry_info_t info;
         nvs_entry_info(it, &info);

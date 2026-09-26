@@ -21,12 +21,14 @@ wifi.ssid            = MyNetwork
 (1 entries)
 kv> del wifi.ssid
 OK
+kv> save
+OK
 kv> list
 (0 entries)
 ```
 
-The store is not persistent yet — values are lost on reboot.
-Persistence via NVS is Project A2 (`kv-persistent`).
+The store persists to NVS on demand via the `save` command and
+reloads automatically at boot.
 
 ---
 
@@ -39,6 +41,7 @@ Persistence via NVS is Project A2 (`kv-persistent`).
 | `del`   | `del <key>`         | Remove a key |
 | `list`  | `list`              | Print all key-value pairs |
 | `clear` | `clear`             | Remove all pairs |
+| `save`  | `save`              | Persist current state to NVS |
 | `help`  | `help`              | List available commands |
 
 Errors are reported inline:
@@ -140,6 +143,8 @@ Options appear under **Component Configuration**:
 | `CLI_TASK_PRIORITY` | 5 | FreeRTOS task priority |
 | `CLI_UART_NUM` | 0 | UART peripheral |
 | `CLI_UART_BAUD` | 115200 | Baud rate |
+| `KV_NVS_PARTITION` | `nvs_user` | NVS partition name |
+| `KV_NVS_NAMESPACE` | `kv_store` | NVS namespace within the partition |
 
 ### KV Store Configuration
 
@@ -157,6 +162,21 @@ rm sdkconfig
 idf.py reconfigure
 ```
 ---
+
+## Partition Table
+
+Custom layout in `partitions.csv`:
+
+| Name       | Type | SubType | Offset   | Size      |
+|------------|------|---------|----------|-----------|
+| `nvs`      | data | nvs     | 0x9000   | 0x6000    |
+| `nvs_user` | data | nvs     | 0xf000   | 0x4000    |
+| `phy_init` | data | phy     | 0x13000  | 0x1000    |
+| `factory`  | app  | factory | 0x20000  | 0x100000  |
+
+`nvs_user` is dedicated to the KV store, isolated from the
+system `nvs` used by WiFi and PHY.
+
 
 ## Known Limitations
 
