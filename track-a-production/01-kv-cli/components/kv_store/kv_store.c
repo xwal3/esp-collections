@@ -6,8 +6,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "sdkconfig.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
 static const char *TAG = "kv_store";
+
+#define KV_NVS_PARTITION  "nvs_user"
+#define KV_NVS_NAMESPACE  "kv_store"
 
 typedef struct{
     char key[CONFIG_KV_MAX_KEY_LEN];
@@ -38,17 +43,41 @@ static kv_entry_t *find_free(void)
     }
     return NULL;
 }
+static esp_err_t set_locked(const char *key, const char *value){
+    kv_entry_t *e = find_entry(key);
+    if (e == NULL) {
+        e = find_free();
+        if (e == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        strncpy(e->key, key, sizeof(e->key) - 1);
+        e->key[sizeof(e->key) - 1] = '\0';
+        e->in_use = true;
+        s_count++;
+    }
+    strncpy(e->value, value, sizeof(e->value) - 1);
+    e->value[sizeof(e->value) - 1] = '\0';
+    return ESP_OK;
+}
+
+
 esp_err_t kv_store_init(void){
-    if (s_mutex != NULL) {
-        return ESP_ERR_INVALID_STATE;
+    
+    if (s_mutex != NULL) return ESP_ERR_INVALID_STATE;
+    esp_err_t nvs_ret = nvs_flash_init_partition(KV_NVS_PARTITION);
+    if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase_partition(KV_NVS_PARTITION);
+        nvs_ret = nvs_flash_init_partition(KV_NVS_PARTITION);
+    }
+
+    if (nvs_ret != ESP_OK) {
+        ESP_LOGE(TAG, "NVS init failed: %s", esp_err_to_name(nvs_ret));
+        return nvs_ret;
     }
 
     s_mutex = xSemaphoreCreateMutex();
 
-    if (s_mutex == NULL) {
-        ESP_LOGE(TAG, "Failed to create mutex");
-        return ESP_ERR_NO_MEM;
-    }
+    if (s_mutex == NULL) return ESP_ERR_NO_MEM;
 
     memset(s_entries, 0, sizeof(s_entries));
     s_count = 0;
@@ -61,33 +90,14 @@ esp_err_t kv_store_init(void){
 
 esp_err_t kv_store_set(const char *key, const char *value)
 {
-    if (key == NULL || value == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (strlen(key) >= CONFIG_KV_MAX_KEY_LEN || strlen(value) >= CONFIG_KV_MAX_VALUE_LEN) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    if (key == NULL || value == NULL) return ESP_ERR_INVALID_ARG;
+    if (strlen(key) >= CONFIG_KV_MAX_KEY_LEN) return ESP_ERR_INVALID_ARG;
+    if (strlen(value) >= CONFIG_KV_MAX_VALUE_LEN) return ESP_ERR_INVALID_ARG;
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-
-    kv_entry_t *e = find_entry(key);
-    if (e == NULL) {
-        e = find_free();
-        if (e == NULL) {
-            xSemaphoreGive(s_mutex);
-            ESP_LOGW(TAG, "Store full, cannot add '%s'", key);
-            return ESP_ERR_NO_MEM;
-        }
-        strncpy(e->key, key, sizeof(e->key) - 1);
-        e->key[sizeof(e->key) - 1] = '\0';
-        e->in_use = true;
-        s_count++;
-    }
-    strncpy(e->value, value, sizeof(e->value) - 1);
-    e->value[sizeof(e->value) - 1] = '\0';
-
+    esp_err_t ret = set_locked(key, value);
     xSemaphoreGive(s_mutex);
-    return ESP_OK;
+    return ret;
 }
 
 esp_err_t kv_store_get(const char *key, char *out_value, size_t out_size){
@@ -159,6 +169,63 @@ esp_err_t kv_store_iterate(kv_iter_fn_t fn, void *user)
     xSemaphoreGive(s_mutex);
     return ESP_OK;
 }
+
+esp_err_t kv_store_save(void){
+    nvs_handle_t h;
+    esp_err_t ret = nvs_open_from_partition(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_READWRITE, &h);
+
+    if (ret != ESP_OK) return ret;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    for (size_t i = 0; i < CONFIG_KV_MAX_KEYS; i++) {
+        if (!s_entries[i].in_use) continue;
+        ret = nvs_set_str(h, s_entries[i].key, s_entries[i].value);
+        if (ret != ESP_OK) {
+            xSemaphoreGive(s_mutex);
+            nvs_close(h);
+            return ret;
+        }
+    }
+
+    ret = nvs_commit(h);
+    xSemaphoreGive(s_mutex);
+    nvs_close(h);
+    return ret;
+
+}
+
+esp_err_t kv_store_load(void)
+{
+    nvs_handle_t h;
+    esp_err_t ret = nvs_open_from_partition(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_READONLY, &h);
+    if (ret == ESP_ERR_NVS_NOT_FOUND) return ESP_OK;
+
+    if (ret != ESP_OK) return ret;
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    memset(s_entries, 0, sizeof(s_entries));
+    s_count = 0;
+
+    nvs_iterator_t it = NULL;
+    ret = nvs_entry_find(KV_NVS_PARTITION, KV_NVS_NAMESPACE, NVS_TYPE_STR, &it);
+    while (ret == ESP_OK) {
+        nvs_entry_info_t info;
+        nvs_entry_info(it, &info);
+
+        char value[CONFIG_KV_MAX_VALUE_LEN];
+        size_t len = sizeof(value);
+        if (nvs_get_str(h, info.key, value, &len) == ESP_OK) {
+            set_locked(info.key, value);
+        }
+        ret = nvs_entry_next(&it);
+    }
+    nvs_release_iterator(it);
+
+    xSemaphoreGive(s_mutex);
+    nvs_close(h);
+    return ESP_OK;
+}
+
 
 size_t kv_store_count(void)
 {
