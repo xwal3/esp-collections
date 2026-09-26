@@ -79,11 +79,13 @@ static esp_err_t cmd_save(int argc, char **argv)
 {
     (void)argc; (void)argv;
     esp_err_t ret = kv_store_save();
-    printf(ret == ESP_OK ? "OK\n" : "error: %s\n", esp_err_to_name(ret));
+    if (ret != ESP_OK) {
+        printf("error: %s\n", esp_err_to_name(ret));
+    } else {
+        printf("OK\n");
+    }
     return ret;
 }
-
-
 static esp_err_t cmd_clear(int argc, char **argv)
 {
     (void)argc; (void)argv;
