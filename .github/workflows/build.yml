@@ -32,9 +32,7 @@ jobs:
         with:
           esp_idf_version: v6.1
           target: esp32s3
-      - name: Build project
-        working-directory: ${{ matrix.project }}
-        run: |
-          idf.py build
-          idf.py size
+          path: ${{ matrix.project }}
+          command: idf.py build && idf.py size
+
 
