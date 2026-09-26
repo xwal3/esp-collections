@@ -1,0 +1,57 @@
+menu "CLI Configuration"
+
+    config CLI_PROMPT
+        string "Prompt string"
+        default "kv> "
+        help
+            Text printed before each command line.
+
+    config CLI_MAX_LINE_LEN
+        int "Maximum input line length"
+        default 128
+        range 32 512
+        help
+            Maximum number of characters in a single command line.
+
+    config CLI_MAX_ARGS
+        int "Maximum number of arguments"
+        default 8
+        range 2 32
+        help
+            Maximum number of tokens per command.
+
+    config CLI_MAX_COMMANDS
+        int "Maximum number of registered commands"
+        default 16
+        range 4 64
+        help
+            Capacity of the command table.
+
+    config CLI_TASK_STACK_SIZE
+        int "CLI task stack size (bytes)"
+        default 4096
+        range 2048 16384
+        help
+            Stack size for the CLI FreeRTOS task.
+
+    config CLI_TASK_PRIORITY
+        int "CLI task priority"
+        default 5
+        range 1 20
+        help
+            FreeRTOS priority of the CLI task.
+
+    config CLI_UART_NUM
+        int "UART port number"
+        default 0
+        range 0 2
+        help
+            UART peripheral used for CLI I/O.
+
+    config CLI_UART_BAUD
+        int "UART baud rate"
+        default 115200
+        help
+            Baud rate for CLI UART communication.
+
+endmenu

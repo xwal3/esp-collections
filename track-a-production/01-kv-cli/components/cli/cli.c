@@ -5,19 +5,11 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
+#include "sdkconfig.h"
 static const char *TAG = "cli";
 
-#define CLI_MAX_COMMANDS     16
-#define CLI_TASK_STACK_SIZE  4096
-#define CLI_TASK_PRIORITY    5
-#define CLI_MAX_LINE_LEN  128
-#define CLI_MAX_ARGS         8
-#define CLI_PROMPT          "kv> "
-#define CLI_UART_NUM         UART_NUM_0
 #define CLI_UART_RX_BUF      256
 #define CLI_UART_TX_BUF      0
-#define CLI_UART_BAUD        115200
 
 
 typedef struct {
@@ -27,7 +19,7 @@ typedef struct {
 } cli_command_t;
 
 
-static cli_command_t s_commands[CLI_MAX_COMMANDS];
+static cli_command_t s_commands[CONFIG_CLI_MAX_COMMANDS];
 static size_t        s_command_count = 0;
 static TaskHandle_t  s_cli_task = NULL;
 
@@ -37,7 +29,7 @@ esp_err_t cli_register_command(const char *name, const char *help, cli_cmd_fn_t 
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (s_command_count >= CLI_MAX_COMMANDS) {
+    if (s_command_count >= CONFIG_CLI_MAX_COMMANDS) {
         ESP_LOGE(TAG, "Command table full, cannot register '%s'", name);
         return ESP_ERR_NO_MEM;
     }
@@ -70,7 +62,7 @@ esp_err_t cli_register_command(const char *name, const char *help, cli_cmd_fn_t 
  * @return Number of tokens found (argc).
  */
 
-static int cli_tokenize(char *line, char **argv, int max_args){
+int cli_tokenize(char *line, char **argv, int max_args){
     int argc = 0;
     char *p = line;
 
@@ -108,7 +100,7 @@ static int cli_tokenize(char *line, char **argv, int max_args){
  * @return ESP_OK on success, ESP_ERR_NOT_FOUND if unknown command.
  */
 
- static esp_err_t cli_dispatch(int argc, char **argv){
+ esp_err_t cli_dispatch(int argc, char **argv){
 
     if (argc == 0) {
         return ESP_OK;
@@ -129,17 +121,17 @@ static void cli_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG, "CLI ready. Type 'help' for commands.");
 
-    char buf[CLI_MAX_LINE_LEN];
-    char *argv[CLI_MAX_ARGS];
+    char buf[CONFIG_CLI_MAX_LINE_LEN];
+    char *argv[CONFIG_CLI_MAX_ARGS];
 
     for (;;) {
-        printf(CLI_PROMPT);
+        fputs(CONFIG_CLI_PROMPT, stdout);
         fflush(stdout);
 
         int len = 0;
         for (;;) {
             uint8_t byte = 0;
-            int n = uart_read_bytes(CLI_UART_NUM, &byte, 1, portMAX_DELAY);
+            int n = uart_read_bytes(CONFIG_CLI_UART_NUM, &byte, 1, portMAX_DELAY);
             if (n <= 0) {
                 continue;
             }
@@ -171,7 +163,7 @@ static void cli_task(void *arg)
             continue;
         }
 
-        int argc = cli_tokenize(buf, argv, CLI_MAX_ARGS);
+        int argc = cli_tokenize(buf, argv, CONFIG_CLI_MAX_ARGS);
         cli_dispatch(argc, argv);
     }
 }
@@ -191,24 +183,22 @@ esp_err_t cli_start(void)
     }
 
      const uart_config_t uart_cfg = {
-        .baud_rate  = CLI_UART_BAUD,
+        .baud_rate  = CONFIG_CLI_UART_BAUD,
         .data_bits  = UART_DATA_8_BITS,
         .parity     = UART_PARITY_DISABLE,
         .stop_bits  = UART_STOP_BITS_1,
         .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
-    esp_err_t uart_ret = uart_driver_install(CLI_UART_NUM, CLI_UART_RX_BUF, CLI_UART_TX_BUF,0, NULL, 0);
+    esp_err_t uart_ret = uart_driver_install(CONFIG_CLI_UART_NUM, CLI_UART_RX_BUF, CLI_UART_TX_BUF,0, NULL, 0);
     
     if (uart_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to install UART driver: %s",esp_err_to_name(uart_ret));
         return uart_ret;
     }
 
-    uart_vfs_dev_use_driver(CLI_UART_NUM);
-    ESP_LOGI(TAG, "cli_start: uart driver installed and VFS routed");
-
-    uart_ret = uart_param_config(CLI_UART_NUM, &uart_cfg);
+    uart_vfs_dev_use_driver(CONFIG_CLI_UART_NUM);
+    uart_ret = uart_param_config(CONFIG_CLI_UART_NUM, &uart_cfg);
     
     if (uart_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to configure UART: %s",esp_err_to_name(uart_ret));
@@ -218,9 +208,9 @@ esp_err_t cli_start(void)
     BaseType_t ret = xTaskCreate(
         cli_task,
         TAG,
-        CLI_TASK_STACK_SIZE,
+        CONFIG_CLI_TASK_STACK_SIZE,
         NULL,
-        CLI_TASK_PRIORITY,
+        CONFIG_CLI_TASK_PRIORITY,
         &s_cli_task
     );
 

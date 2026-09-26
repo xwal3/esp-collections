@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "01-kv-cli.c"
+    SRCS "cmd_kv.c" "01-kv-cli.c"
     INCLUDE_DIRS "."
-    REQUIRES cli
+    REQUIRES cli kv_store
 )
