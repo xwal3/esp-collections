@@ -28,7 +28,7 @@ jobs:
           submodules: recursive
 
       - name: Build with ESP-ID
-        uses: espressif/esp-idf-action@v1
+        uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v6.1
           target: esp32s3
