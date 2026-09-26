@@ -1,0 +1,20 @@
+menu "KV Store Configuration"
+    config KV_MAX_KEYS
+        int "Maximum number of key-value pairs"
+        default 16
+        range 4 128
+        help
+            Number of slots in the in-memory store.
+    config KV_MAX_KEY_LEN
+        int "Maximum key length (bytes)"
+        default 32
+        range 8 128
+        help
+            Maximum length of a key including the NUL terminator.
+    config KV_MAX_VALUE_LEN
+        int "Maximum value length (bytes)"
+        default 64
+        range 8 256
+        help
+            Maximum length of a value including the NUL terminator.
+endmenu

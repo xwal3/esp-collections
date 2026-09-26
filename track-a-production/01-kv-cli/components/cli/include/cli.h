@@ -39,6 +39,10 @@ esp_err_t cli_init(void);
  */
 esp_err_t cli_start(void);
 
+/* Exposed for unit tests only. Not part of the public API. */
+int cli_tokenize(char *line, char **argv, int max_args);
+esp_err_t cli_dispatch(int argc, char **argv);
+
 #ifdef __cplusplus
 }
 #endif
